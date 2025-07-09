@@ -223,7 +223,7 @@ def perturb(net, optimizer, perturb_factor, tp_set=None, name="actor"):
         ]
         new_net = deepcopy(net)
         new_net.apply(weight_init)
-        if name == "actor_enc":
+        if name == "actor":
             tp_set.sampled_model(new_net, tp_set.sample_params(tp_set.cal_params_stats(tp_set.actors)))
         elif name == "actor_moe_expert":
             tp_set.sampled_model(new_net, tp_set.sample_params(tp_set.cal_params_stats(tp_set.moes, moe_expert=True)), moe_expert=True)
