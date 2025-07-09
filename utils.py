@@ -293,20 +293,24 @@ class models_tuple(object):
 
     def cal_params_stats(self, models, moe_expert=False, moe_gate=False):
         weights_and_biases = []
+        dicts = {}
+        for model in models:
+            for name, param in model.named_modules():
+                if name not in dicts:
+                    dicts[name] = []
+                try:
+                    dicts[name+'.weight'].append(param.weight.data)
+                except:
+                    pass
+                try:
+                    dicts[name+'.bias'].append(param.bias.data)
+                except:
+                    pass
         for name, param in models[0].named_modules():
-            if not (moe_expert or moe_gate) and "moe" not in name and (isinstance(param, nn.Linear) or isinstance(param, nn.Conv2d)) and "." in name:
-                layer_weights = torch.stack([model._modules[name.split(".")[0]][int(name.split(".")[1])].weight.data for model in models])
-                layer_biases = torch.stack([model._modules[name.split(".")[0]][int(name.split(".")[1])].bias.data for model in models])
-                weights_and_biases.append(layer_weights)
-                weights_and_biases.append(layer_biases)
-            elif (moe_expert or moe_gate) and isinstance(param, nn.Linear) and "." in name:
-                layer_weights = torch.stack([model._modules[name.split(".")[0]][int(name.split(".")[1])].weight.data for model in models])
-                layer_biases = torch.stack([model._modules[name.split(".")[0]][int(name.split(".")[1])].bias.data for model in models])
-                weights_and_biases.append(layer_weights)
-                weights_and_biases.append(layer_biases)
-            elif not (moe_expert or moe_gate) and isinstance(param, nn.Linear):
-                layer_weights = torch.stack([model.weight.data for model in models])
-                weights_and_biases.append(layer_weights)
+            for suffix in ['.weight', '.bias']:
+                if name + suffix not in dicts or len(dicts[name + suffix]) == 0:
+                    continue
+                weights_and_biases.append(torch.stack(dicts[name + suffix], dim=0))
         params_stats = [(param.mean(dim=0), torch.clamp(param.std(dim=0), min=1e-7)) for param in weights_and_biases]
         return params_stats
 
@@ -320,14 +324,13 @@ class models_tuple(object):
     def sampled_model(self, model, sampled_params, moe_expert=False, moe_gate=False):
         i = 0
         for name, param in model.named_modules():
-            if not (moe_expert or moe_gate) and "moe" not in name and (isinstance(param, nn.Linear) or isinstance(param, nn.Conv2d)):
-                param.weight.data = sampled_params[2 * i]
-                param.bias.data = sampled_params[2 * i + 1]
-                i += 1
-            if (moe_expert or moe_gate) and isinstance(param, nn.Linear):
-                param.weight.data = sampled_params[2 * i]
-                param.bias.data = sampled_params[2 * i + 1]
-                i += 1
-            if not (moe_expert or moe_gate) and isinstance(param, nn.Linear):
+            try:
                 param.weight.data = sampled_params[i]
                 i += 1
+            except:
+                pass
+            try:
+                param.bias.data = sampled_params[i]
+                i += 1
+            except:
+                pass
