@@ -87,6 +87,7 @@ class Encoder(nn.Module):
                                                nn.ReLU(), nn.Conv2d(64, 128, 3, stride=1, padding=1), nn.ReLU())
             
             feature_dim = obs_shape[0]//9 * 4 * 128 * 11 * 11
+            
             self.repr_dim = 1024
             self.output_layer = nn.Sequential(nn.LayerNorm(feature_dim), nn.Linear(feature_dim, self.repr_dim))
             self.apply(utils.weight_init)
