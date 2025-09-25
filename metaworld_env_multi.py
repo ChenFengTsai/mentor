@@ -242,7 +242,7 @@ def make_single_env(name, frame_stack, action_repeat, seed, size=(84, 84)):
     """Create a single MetaWorld environment"""
     env = MetaWorld(name, seed, action_repeat, size, 'corner2')
     env = NormalizeAction(env)
-    env = TimeLimit(env, 250)
+    env = TimeLimit(env, 150)
     env = metaworld_wrapper(env, frame_stack)
     return env
 

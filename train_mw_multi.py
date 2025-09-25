@@ -156,48 +156,79 @@ class Workspace:
     
     def eval(self):
         step, episode, total_reward, total_sr = 0, 0, 0, 0
-        eval_until_episode = utils.Until(self.cfg.num_eval_episodes)
         
         # Track open-task specific metrics
         if self.is_open_multitask:
             task_rewards = {}
             task_success_rates = {}
-
-        while eval_until_episode(episode):
-            episode_sr = False
-            episode_reward = 0
-            time_step = self.eval_env.reset()
+            episodes_per_task = self.cfg.eval_episodes_per_task  # Fixed number of episodes per task
+            task_names = ['door-open', 'drawer-open', 'window-open']
             
-            # Track current task for open-only multi-task
-            current_task = getattr(time_step, 'task_name', 'unknown')
-            if self.is_open_multitask:
-                if current_task not in task_rewards:
-                    task_rewards[current_task] = []
-                    task_success_rates[current_task] = []
+            # Evaluate each task for exactly episodes_per_task episodes
+            for task_name in task_names:
+                task_rewards[task_name] = []
+                task_success_rates[task_name] = []
+                
+                # Force the eval environment to use this specific task
+                if hasattr(self.eval_env, 'force_task'):
+                    self.eval_env.force_task(task_name)
+                
+                for task_episode in range(episodes_per_task):
+                    episode_sr = False
+                    episode_reward = 0
+                    time_step = self.eval_env.reset()
                     
-            self.video_recorder.init(self.eval_env, enabled=False)
-            while not time_step.last():
-                with torch.no_grad(), utils.eval_mode(self.agent):
-                    action = self.agent.act(time_step.observation,
+                    self.video_recorder.init(self.eval_env, enabled=False)
+                    while not time_step.last():
+                        with torch.no_grad(), utils.eval_mode(self.agent):
+                            action = self.agent.act(time_step.observation,
+                                                self.global_step,
+                                                eval_mode=True)
+                        time_step = self.eval_env.step(action)
+                        episode_sr = episode_sr or time_step.success
+                        self.video_recorder.record(self.eval_env)
+                        episode_reward += time_step.reward
+                        step += 1
+
+                    task_rewards[task_name].append(episode_reward)
+                    task_success_rates[task_name].append(episode_sr)
+                    
+                    total_reward += episode_reward
+                    total_sr += episode_sr
+                    episode += 1
+                    
+                    self.video_recorder.save(f'{self.global_frame}_{task_name}_{task_episode}.mp4')
+            
+            # Reset eval environment to normal task switching after evaluation
+            if hasattr(self.eval_env, 'reset_task_switching'):
+                self.eval_env.reset_task_switching()
+                
+        else:
+            # Original evaluation logic for single tasks
+            eval_until_episode = utils.Until(self.cfg.num_eval_episodes)
+            
+            while eval_until_episode(episode):
+                episode_sr = False
+                episode_reward = 0
+                time_step = self.eval_env.reset()
+                
+                self.video_recorder.init(self.eval_env, enabled=False)
+                while not time_step.last():
+                    with torch.no_grad(), utils.eval_mode(self.agent):
+                        action = self.agent.act(time_step.observation,
                                             self.global_step,
                                             eval_mode=True)
-                time_step = self.eval_env.step(action)
-                episode_sr = episode_sr or time_step.success
-                self.video_recorder.record(self.eval_env)
-                episode_reward += time_step.reward
-                step += 1
+                    time_step = self.eval_env.step(action)
+                    episode_sr = episode_sr or time_step.success
+                    self.video_recorder.record(self.eval_env)
+                    episode_reward += time_step.reward
+                    step += 1
 
-            total_reward += episode_reward
-            total_sr += episode_sr
-            
-            # Track task-specific metrics for open-only multi-task
-            if self.is_open_multitask:
-                task_rewards[current_task].append(episode_reward)
-                task_success_rates[current_task].append(episode_sr)
+                total_reward += episode_reward
+                total_sr += episode_sr
+                episode += 1
+                self.video_recorder.save(f'{self.global_frame}.mp4')
                 
-            episode += 1
-            self.video_recorder.save(f'{self.global_frame}.mp4')
-            
         # Log overall metrics
         with self.logger.log_and_dump_ctx(self.global_frame, ty='eval') as log:
             log('episode_success_rate', total_sr / episode)
@@ -208,7 +239,7 @@ class Workspace:
             
             # Log task-specific metrics for open-only multi-task
             if self.is_open_multitask:
-                for task_name in ['door-open', 'drawer-open', 'window-open']:
+                for task_name in task_names:
                     if task_name in task_rewards and task_rewards[task_name]:
                         avg_reward = np.mean(task_rewards[task_name])
                         avg_sr = np.mean(task_success_rates[task_name])
@@ -216,7 +247,71 @@ class Workspace:
                         log(f'task_{task_name.replace("-", "_")}_reward', avg_reward)
                         log(f'task_{task_name.replace("-", "_")}_success_rate', avg_sr)
                         
-                        print(f"Eval {task_name}: Reward {avg_reward:.3f}, Success {avg_sr:.3f}")
+                        print(f"Eval {task_name}: Reward {avg_reward:.3f}, Success {avg_sr:.3f} ({episodes_per_task} episodes)")
+                        
+    # def eval(self):
+    #     step, episode, total_reward, total_sr = 0, 0, 0, 0
+    #     eval_until_episode = utils.Until(self.cfg.num_eval_episodes)
+        
+    #     # Track open-task specific metrics
+    #     if self.is_open_multitask:
+    #         task_rewards = {}
+    #         task_success_rates = {}
+
+    #     while eval_until_episode(episode):
+    #         episode_sr = False
+    #         episode_reward = 0
+    #         time_step = self.eval_env.reset()
+            
+    #         # Track current task for open-only multi-task
+    #         current_task = getattr(time_step, 'task_name', 'unknown')
+    #         if self.is_open_multitask:
+    #             if current_task not in task_rewards:
+    #                 task_rewards[current_task] = []
+    #                 task_success_rates[current_task] = []
+                    
+    #         self.video_recorder.init(self.eval_env, enabled=False)
+    #         while not time_step.last():
+    #             with torch.no_grad(), utils.eval_mode(self.agent):
+    #                 action = self.agent.act(time_step.observation,
+    #                                         self.global_step,
+    #                                         eval_mode=True)
+    #             time_step = self.eval_env.step(action)
+    #             episode_sr = episode_sr or time_step.success
+    #             self.video_recorder.record(self.eval_env)
+    #             episode_reward += time_step.reward
+    #             step += 1
+
+    #         total_reward += episode_reward
+    #         total_sr += episode_sr
+            
+    #         # Track task-specific metrics for open-only multi-task
+    #         if self.is_open_multitask:
+    #             task_rewards[current_task].append(episode_reward)
+    #             task_success_rates[current_task].append(episode_sr)
+                
+    #         episode += 1
+    #         self.video_recorder.save(f'{self.global_frame}.mp4')
+            
+    #     # Log overall metrics
+    #     with self.logger.log_and_dump_ctx(self.global_frame, ty='eval') as log:
+    #         log('episode_success_rate', total_sr / episode)
+    #         log('episode_reward', total_reward / episode)
+    #         log('episode_length', step * self.cfg.action_repeat / episode)
+    #         log('episode', self.global_episode)
+    #         log('step', self.global_step)
+            
+    #         # Log task-specific metrics for open-only multi-task
+    #         if self.is_open_multitask:
+    #             for task_name in ['door-open', 'drawer-open', 'window-open']:
+    #                 if task_name in task_rewards and task_rewards[task_name]:
+    #                     avg_reward = np.mean(task_rewards[task_name])
+    #                     avg_sr = np.mean(task_success_rates[task_name])
+                        
+    #                     log(f'task_{task_name.replace("-", "_")}_reward', avg_reward)
+    #                     log(f'task_{task_name.replace("-", "_")}_success_rate', avg_sr)
+                        
+    #                     print(f"Eval {task_name}: Reward {avg_reward:.3f}, Success {avg_sr:.3f}")
 
     def train(self):
         # predicates 

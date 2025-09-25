@@ -35,6 +35,6 @@ agent:
   tp_set_size: 10
   moe_gate_dim: 256
   moe_hidden_dim: 256
-  num_experts: 16
-  top_k: 4
+  num_experts: 6
+  top_k: 1
   dropout: 0.1

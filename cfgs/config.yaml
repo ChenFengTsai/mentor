@@ -40,7 +40,7 @@ feature_dim: 50
 
 hydra:
   run:
-    dir: ./exp_local/${now:%Y.%m.%d}/${now:%H%M%S}_${hydra.job.override_dirname}
+    dir: /storage/ssd1/richtsai1103/iso_ted/log/metaworld/multi_5/mentor_open/mentor/${now:%Y.%m.%d}/${now:%H%M%S}_${hydra.job.override_dirname}
   sweep:
     dir: ./exp/${now:%Y.%m.%d}/${now:%H%M}_${agent_cfg.experiment}
     subdir: ${hydra.job.num}
